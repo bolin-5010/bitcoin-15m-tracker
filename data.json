@@ -2,5 +2,12 @@
   "symbol": "BTC-USD",
   "source": "Coinbase Exchange ticker price (last trade)",
   "interval_minutes": 15,
-  "samples": []
+  "samples": [
+    {
+      "time": "2026-10-26T06:42:49Z",
+      "price": 79909.24,
+      "trade_time": "2026-10-26T06:42:47Z"
+    }
+  ],
+  "updated_at": "2026-10-26T06:42:49Z"
 }
