@@ -1,0 +1,6 @@
+{
+  "symbol": "BTC-USD",
+  "source": "Coinbase Exchange ticker price (last trade)",
+  "interval_minutes": 15,
+  "samples": []
+}
