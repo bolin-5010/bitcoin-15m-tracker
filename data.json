@@ -1,15 +1,41 @@
 {
   "symbol": "BTC-USD",
-  "source": "Coinbase Exchange BTC-USD historical 1-minute candle open",
+  "source": "CF Benchmarks BRTI via Kalshi (authenticated)",
   "interval_minutes": 15,
+  "price_definition": "mean BRTI index observations over 60 seconds before boundary",
+  "updated_at": "2026-10-26T07:15:45Z",
   "samples": [
     {
+      "time": "2026-10-26T06:30:00Z",
+      "price": 79863.229,
+      "price_type": "prior_60s_mean",
+      "source": "CF Benchmarks BRTI via Kalshi",
+      "observations": 60,
+      "seconds_covered": 60
+    },
+    {
       "time": "2026-10-26T06:45:00Z",
-      "price": 79855.79,
-      "price_type": "1m_candle_open",
-      "source_candle_time": "2026-10-26T06:45:00Z"
+      "price": 79871.333,
+      "price_type": "prior_60s_mean",
+      "source": "CF Benchmarks BRTI via Kalshi",
+      "observations": 60,
+      "seconds_covered": 60
+    },
+    {
+      "time": "2026-10-26T07:00:00Z",
+      "price": 79996.5702,
+      "price_type": "prior_60s_mean",
+      "source": "CF Benchmarks BRTI via Kalshi",
+      "observations": 60,
+      "seconds_covered": 60
+    },
+    {
+      "time": "2026-10-26T07:15:00Z",
+      "price": 80000.5753,
+      "price_type": "prior_60s_mean",
+      "source": "CF Benchmarks BRTI via Kalshi",
+      "observations": 60,
+      "seconds_covered": 60
     }
-  ],
-  "updated_at": "2026-10-26T06:52:06Z",
-  "price_definition": "first trade of minute starting at label"
+  ]
 }
