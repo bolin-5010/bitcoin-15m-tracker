@@ -1,45 +1,110 @@
 #!/usr/bin/env python3
-"""Collect Coinbase Exchange BTC-USD last trade, append only valid timed samples."""
-import json, os, pathlib, time, urllib.request
+"""Record quarter-hour BTC/USD prices using Coinbase 1-minute candle OPEN.
+
+A label of 12:15:00 means the first trade in [12:15:00,12:16:00) UTC,
+not a trade guaranteed to have happened at exactly 12:15:00.
+"""
+import json
+import os
+import pathlib
+import time
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from decimal import Decimal
 
-ROOT = pathlib.Path(__file__).parent
+ROOT = pathlib.Path(__file__).resolve().parent
 DATA = ROOT / 'data.json'
-API = 'https://api.exchange.coinbase.com/products/BTC-USD/ticker'
+API = 'https://api.exchange.coinbase.com/products/BTC-USD/candles'
+QUARTER = 15 * 60
+MINUTE = 60
+MAX_BACKFILL_SECONDS = 24 * 3600
 
-def collect():
-    request = urllib.request.Request(API, headers={'User-Agent': 'BTC15Monitor/1.0', 'Accept': 'application/json'})
-    with urllib.request.urlopen(request, timeout=25) as resp:
-        result = json.load(resp)
-    price = Decimal(str(result['price']))
-    assert price > 0 and price.is_finite(), 'Invalid price'
-    trade_time = datetime.fromisoformat(result['time'].replace('Z', '+00:00'))
-    now = datetime.now(timezone.utc)
-    if abs((now-trade_time).total_seconds()) > 600:
-        raise ValueError('Price trade is stale: '+str(trade_time))
-    record = {'time':now.isoformat(timespec='seconds').replace('+00:00','Z'), 'price':float(price), 'trade_time':trade_time.isoformat(timespec='seconds').replace('+00:00','Z')}
-    if DATA.exists():
-        payload=json.loads(DATA.read_text('utf-8'))
-    else:
-        payload={'symbol':'BTC-USD','source':'Coinbase Exchange ticker price (last trade)','interval_minutes':15,'samples':[]}
-    samples=payload.setdefault('samples',[])
-    # A rerun within the same 15-minute UTC bin updates the existing point.
-    key=int(now.timestamp())//900
-    samples[:]=[s for s in samples if int(datetime.fromisoformat(s['time'].replace('Z','+00:00')).timestamp())//900 != key]
-    samples.append(record)
-    samples.sort(key=lambda s:s['time'])
-    # 365 days maximum to prevent repository from growing forever
-    payload['samples']=samples[-35040:]
-    payload['updated_at']=record['time']
-    DATA.write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-    print(record)
 
-if __name__=='__main__':
+def iso(timestamp):
+    return datetime.fromtimestamp(timestamp, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def quarter_timestamp(s):
+    timestamp = int(datetime.fromisoformat(s.replace('Z', '+00:00')).timestamp())
+    return timestamp if timestamp % QUARTER == 0 else None
+
+
+def get_candles(start, end):
+    params = urllib.parse.urlencode({'granularity': 60, 'start': iso(start), 'end': iso(end)})
+    request = urllib.request.Request(f'{API}?{params}', headers={
+        'User-Agent': 'BTCQuarterHourMonitor/2.0', 'Accept': 'application/json'})
     for attempt in range(3):
         try:
-            collect(); break
-        except Exception as err:
-            if attempt==2: raise
-            print(f'Attempt {attempt+1} failed: {err}')
-            time.sleep(4 * (attempt+1))
+            with urllib.request.urlopen(request, timeout=30) as response:
+                rows = json.load(response)
+            if not isinstance(rows, list):
+                raise ValueError(f'Unexpected Coinbase API response: {str(rows)[:200]}')
+            return rows
+        except Exception:
+            if attempt == 2:
+                raise
+            time.sleep(3 * (attempt + 1))
+
+
+def collect(now=None):
+    now = int(time.time()) if now is None else int(now)
+    # Wait until at least 70 seconds after a quarter to use a completed 1-min candle.
+    latest = ((now - 70) // QUARTER) * QUARTER
+    if latest < 0:
+        return 0
+
+    if DATA.exists():
+        payload = json.loads(DATA.read_text(encoding='utf-8'))
+    else:
+        payload = {}
+    old = payload.get('samples', [])
+    # Remove legacy execution-time samples; only genuine quarter-hour labels are valid.
+    by_time = {}
+    for sample in old:
+        try:
+            stamp = quarter_timestamp(sample['time'])
+            price = Decimal(str(sample['price']))
+            if stamp is not None and stamp <= latest and price.is_finite() and price > 0:
+                by_time[stamp] = sample
+        except (KeyError, ValueError, TypeError, ArithmeticError):
+            continue
+
+    # On first deployment, start at the latest completed quarter; don't pretend we
+    # were recording before activation. Later runs backfill missed quarters <=24h.
+    start = max(by_time) + QUARTER if by_time else latest
+    start = max(start, latest - MAX_BACKFILL_SECONDS)
+    if start > latest:
+        print('No new completed quarter-hour slot. Existing samples:', len(by_time))
+    else:
+        # 4h windows (<300 one-minute bars per request), including the final minute.
+        for window_start in range(start, latest + 1, 4 * 3600):
+            window_last = min(window_start + 4 * 3600 - QUARTER, latest)
+            candles = get_candles(window_start, window_last + MINUTE)
+            expected = set(range(window_start, window_last + 1, QUARTER))
+            for candle in candles:
+                if not isinstance(candle, list) or len(candle) < 6:
+                    continue
+                stamp = int(candle[0])
+                if stamp not in expected or stamp in by_time:
+                    continue
+                price = Decimal(str(candle[3]))  # Coinbase [time,low,high,open,close,volume]
+                if not price.is_finite() or price <= 0:
+                    continue
+                by_time[stamp] = {'time': iso(stamp), 'price': float(price),
+                                  'price_type': '1m_candle_open', 'source_candle_time': iso(stamp)}
+            time.sleep(0.2)
+
+    records = [by_time[k] for k in sorted(by_time)][-35040:]
+    payload.update({'symbol': 'BTC-USD',
+                    'source': 'Coinbase Exchange BTC-USD historical 1-minute candle open',
+                    'interval_minutes': 15, 'price_definition': 'first trade of minute starting at label',
+                    'samples': records, 'updated_at': iso(now)})
+    DATA.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    added = len(records) - len([s for s in old if quarter_timestamp(s.get('time', '1970-01-01T00:00:00Z')) is not None])
+    print(f'Finished. Last eligible: {iso(latest)}; stored: {len(records)}. Last records: {records[-3:]}')
+    return max(0, added)
+
+
+if __name__ == '__main__':
+    collect()
