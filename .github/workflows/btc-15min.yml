@@ -1,7 +1,7 @@
 name: BTC 15-minute monitor (CF BRTI)
 on:
   schedule:
-    - cron: '3,18,33,48 * * * *'
+    - cron: '6,21,36,51 * * * *'
   workflow_dispatch:
 permissions:
   contents: write
