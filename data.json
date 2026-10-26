@@ -1,13 +1,15 @@
 {
   "symbol": "BTC-USD",
-  "source": "Coinbase Exchange ticker price (last trade)",
+  "source": "Coinbase Exchange BTC-USD historical 1-minute candle open",
   "interval_minutes": 15,
   "samples": [
     {
-      "time": "2026-10-26T06:42:49Z",
-      "price": 79909.24,
-      "trade_time": "2026-10-26T06:42:47Z"
+      "time": "2026-10-26T06:45:00Z",
+      "price": 79855.79,
+      "price_type": "1m_candle_open",
+      "source_candle_time": "2026-10-26T06:45:00Z"
     }
   ],
-  "updated_at": "2026-10-26T06:42:49Z"
+  "updated_at": "2026-10-26T06:52:06Z",
+  "price_definition": "first trade of minute starting at label"
 }
