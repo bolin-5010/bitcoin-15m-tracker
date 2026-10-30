@@ -16,3 +16,80 @@ function render(){const n=samples.length,last=samples[n-1],prev=samples[n-2];$('
 function draw(data){const c=$('chart'),rect=c.getBoundingClientRect(),dpr=window.devicePixelRatio||1,w=Math.max(300,rect.width),h=295;c.width=Math.round(w*dpr);c.height=h*dpr;const ctx=c.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);const x0=62,y0=18,x1=w-14,y1=h-37;ctx.font='12px system-ui';if(!data.length){ctx.fillStyle='#9dadc5';ctx.fillText('暂无当前时间范围内的历史价格数据',20,h/2);return}let lo=Math.min(...data.map(x=>x.price)),hi=Math.max(...data.map(x=>x.price));const pad=Math.max(10,(hi-lo)*.15);lo-=pad;hi+=pad;const t0=Date.parse(data[0].time),t1=Date.parse(data[data.length-1].time),X=t=>x0+(Date.parse(t)-t0)/Math.max(1,t1-t0)*(x1-x0),Y=v=>y1-(v-lo)/(hi-lo)*(y1-y0);ctx.strokeStyle='#2a3853';ctx.fillStyle='#9dadc5';for(let i=0;i<=4;i++){let y=y0+i*(y1-y0)/4;ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x1,y);ctx.stroke();ctx.fillText('$'+Math.round(hi-(hi-lo)*i/4).toLocaleString(),3,y+4)}ctx.strokeStyle='#f3ae4d';ctx.lineWidth=2;ctx.beginPath();data.forEach((p,i)=>{let x=X(p.time),y=Y(p.price);if(i===0||!isValidGap(data[i-1],p))ctx.moveTo(x,y);else ctx.lineTo(x,y)});ctx.stroke();const last=data[data.length-1];ctx.fillStyle='#f3ae4d';ctx.beginPath();ctx.arc(X(last.time),Y(last.price),4,0,Math.PI*2);ctx.fill();ctx.fillStyle='#9dadc5';ctx.fillText(dt(new Date(Date.parse(data[0].time)-900000)),x0,h-9);ctx.textAlign='right';ctx.fillText(dt(new Date(Date.parse(last.time)-900000)),x1,h-9);ctx.textAlign='left'}
 document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{hours=+b.dataset.range;document.querySelectorAll('[data-range]').forEach(x=>x.classList.toggle('active',x===b));render()});$('refresh').onclick=load;$('export').onclick=()=>{const csv=['period_start_utc,measurement_end_utc,price_usd,price_type,source',...samples.map(s=>[new Date(Date.parse(s.time)-900000).toISOString(),s.time,s.price,s.price_type||'',s.source||''].join(','))].join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.download='bitcoin_15min_'+new Date().toISOString().slice(0,10)+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000)};window.addEventListener('resize',()=>{if(samples.length)render()});load();setInterval(load,60000);
 </script></body></html>
+
+const originalChartDraw = draw;
+let hoverChartData = [];
+
+draw = function(data) {
+  hoverChartData = data;
+  originalChartDraw(data);
+};
+
+const hoverCanvas = document.getElementById('chart');
+const hoverTip = document.createElement('div');
+
+hoverTip.style.cssText = `
+  display:none;
+  position:fixed;
+  z-index:999;
+  pointer-events:none;
+  background:#0c1525;
+  color:white;
+  border:1px solid #506582;
+  border-radius:12px;
+  padding:12px 16px;
+  box-shadow:0 8px 24px #0009;
+  font:13px/1.7 system-ui;
+  white-space:pre-line;
+`;
+
+document.body.appendChild(hoverTip);
+hoverCanvas.style.cursor = 'crosshair';
+
+function showHoverPrice(e) {
+  if (!hoverChartData.length) return;
+
+  const rect = hoverCanvas.getBoundingClientRect();
+  const w = Math.max(300, rect.width);
+  const x = (e.clientX - rect.left) * w / rect.width;
+  const ratio = Math.max(0, Math.min(1,
+    (x - 62) / (w - 76)
+  ));
+
+  const first = Date.parse(hoverChartData[0].time);
+  const last = Date.parse(
+    hoverChartData[hoverChartData.length - 1].time
+  );
+  const target = first + ratio * (last - first);
+
+  const item = hoverChartData.reduce((a, b) =>
+    Math.abs(Date.parse(a.time) - target) <
+    Math.abs(Date.parse(b.time) - target) ? a : b
+  );
+
+  const previous = samples.find(s =>
+    Date.parse(s.time) === Date.parse(item.time) - 900000
+  );
+
+  const change = previous
+    ? signed(item.price - previous.price) + ' (' +
+      percent((item.price - previous.price) / previous.price) + ')'
+    : '暂无相邻记录';
+
+  hoverTip.textContent =
+    '纽约时间：' + period(item.time) +
+    '\nBTC价格：' + USD(item.price) +
+    '\n15分钟变化：' + change;
+
+  hoverTip.style.display = 'block';
+  hoverTip.style.left = Math.max(8, Math.min(
+    e.clientX + 14, window.innerWidth - hoverTip.offsetWidth - 8
+  )) + 'px';
+  hoverTip.style.top = Math.max(8, e.clientY - 110) + 'px';
+}
+
+hoverCanvas.addEventListener('pointermove', showHoverPrice);
+hoverCanvas.addEventListener('pointerdown', showHoverPrice);
+hoverCanvas.addEventListener('pointerleave', e => {
+  if (e.pointerType !== 'touch') hoverTip.style.display = 'none';
+});
