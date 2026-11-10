@@ -3,7 +3,7 @@
   "source": "CF Benchmarks BRTI via Kalshi (authenticated)",
   "interval_minutes": 15,
   "price_definition": "mean BRTI index observations over 60 seconds before boundary",
-  "updated_at": "2026-11-10T11:02:18Z",
+  "updated_at": "2026-11-10T11:17:18Z",
   "samples": [
     {
       "time": "2026-10-26T06:30:00Z",
@@ -11344,6 +11344,14 @@
     {
       "time": "2026-11-10T11:00:00Z",
       "price": 74136.2573,
+      "price_type": "prior_60s_mean",
+      "source": "CF Benchmarks BRTI via Kalshi",
+      "observations": 60,
+      "seconds_covered": 60
+    },
+    {
+      "time": "2026-11-10T11:15:00Z",
+      "price": 74271.0607,
       "price_type": "prior_60s_mean",
       "source": "CF Benchmarks BRTI via Kalshi",
       "observations": 60,
